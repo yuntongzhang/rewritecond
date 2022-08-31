@@ -38,7 +38,6 @@ std::string get_var_and_inc() {
 // for binding ast nodes
 static StringRef if_stmt = "if_stmt";
 static StringRef if_cond = "if_cond";
-static StringRef if_head = "if_head";
 
 static StringRef while_stmt = "while_stmt";
 static StringRef while_cond = "while_cond";
@@ -54,7 +53,6 @@ static StringRef while_body_single = "while_body_single";
 static RewriteRule else_if_rule = makeRule(
     traverse(TK_IgnoreUnlessSpelledInSource,
         ifStmt(
-            stmt().bind(if_stmt), // bind first
             hasCondition(
                 allOf(
                     // cond needs to be an expr, AND not just a single var refering to some decl
@@ -62,40 +60,28 @@ static RewriteRule else_if_rule = makeRule(
                     unless(declRefExpr())
                 )
             ),
-            // `else if` has parent of ifStmt, while nested-if usually does not
-            // the exception is where the inner-if is the only if-body, and is not in {}
-            // However, this exception is of the form `if (x) if (y) ...`, which means we also can
-            // put `y` outside outer-if
-            hasParent(ifStmt()),
-            hasAncestor(
-                ifStmt( // this should be the starting if for this else-if
-                    has(ifStmt()), // has an if child (i.e. has else-if)
-                    unless(hasParent(ifStmt())), // does not have if parent
-                    // note: until here, we can still match to an `if` far front which also has
-                    // else-if. Example would be : if () { if () {} else if () {} } else if { ... }
-                    // To avoid this case, we require that this ancestor should reach current else-if
-                    // by only following ifs. Since there is no convenient way of doing so,
-                    // we hardcode the cases for a few steps of tracing if.
-                    // anyOf(
-                        has(ifStmt(equalsBoundNode("if_stmt")))
-                        // has(ifStmt(has(ifStmt(equalsBoundNode("if_stmt"))))),
-                        // has(ifStmt(has(ifStmt(has(ifStmt(equalsBoundNode("if_stmt"))))))),
-                        // has(ifStmt(has(ifStmt(has(ifStmt(has(ifStmt(equalsBoundNode("if_stmt")))))))))
-                    // )
-                ).bind(if_head)
-            )
-        )
+            // `else if` has parent of ifStmt, while nested-if usually does not.
+            // The exception is where the inner-if is the only if-body, and is not in {}
+            // However, this exception is of the form `if (x) if (y) ...`, which can be handled in
+            // the same way as our edits here. So, this rule actually captures else-if + this case.
+            hasParent(ifStmt())
+        ).bind(if_stmt)
     ),
     {
         // declare the init cond variable
         insertBefore(
-            before(statement(std::string(if_head))),
-            cat("int ", run([](auto x) {return get_var_and_inc();}), " = ", expression(if_cond), ";\n")
+            statement(std::string(if_stmt)),
+            cat("{\nint ", run([](auto x) {return get_var_and_inc();}), " = ", expression(if_cond), ";\n")
         ),
         // replace cond expr with cond variable
         changeTo(
             node(std::string(if_cond)),
             run([](auto x) {return get_var_only();})
+        ),
+        // add closing } and end of this if-stmt (the enclosing if-stmt, not this else-if branch)
+        insertAfter(
+            node(std::string(if_stmt)),
+            cat("\n}")
         )
     }
 );
@@ -205,9 +191,10 @@ static RewriteRule while_rule_single = makeRule(
 // TODO: do-while loop
 // static RewriteRule do_rule;
 
+// TODO: for loop
 
 static auto rules = applyFirst({
-    // else_if_rule,
+    else_if_rule,
     if_rule,
     while_rule,
     while_rule_single
@@ -260,11 +247,6 @@ int main(int argc, const char **argv) {
     spec.Style = format::getGoogleStyle(format::FormatStyle::LanguageKind::LK_Cpp);
     auto ChangedCode = applyAtomicChanges(argv[1], buffer.str(), Changes, spec);
 
-    if (!ChangedCode) {
-      llvm::errs() << "Applying changes failed: "
-                   << llvm::toString(ChangedCode.takeError()) << "\n";
-      return -1;
-    }
-
     std::cout << ChangedCode.get() << std::endl;
+    // std::cout << toString(ChangedCode.takeError()) << std::endl;
 }
