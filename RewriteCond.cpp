@@ -22,6 +22,8 @@ using namespace clang::transformer;
 using namespace clang::ast_matchers;
 using namespace clang::tooling;
 
+#define DEBUG false
+
 // for generating names
 static std::string var_base = "__fuzzfix";
 static int new_var_count = 0;
@@ -289,9 +291,11 @@ static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 // A help message for this specific tool can be added afterwards.
 static cl::extrahelp MoreHelp("\nMore help text...\n");
 
+
+// AtomicChange consumer
 static AtomicChanges Changes;
 static void consumer(Expected<AtomicChange> C) {
-    std::cout << C->toYAMLString();
+    if (DEBUG) std::cout << C->toYAMLString() << std::endl;
     Changes.push_back(*C);
 }
 
