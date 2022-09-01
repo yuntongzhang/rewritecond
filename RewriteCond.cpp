@@ -323,6 +323,12 @@ int main(int argc, const char **argv) {
     spec.Style = format::getGoogleStyle(format::FormatStyle::LanguageKind::LK_Cpp);
     auto ChangedCode = applyAtomicChanges(argv[1], buffer.str(), Changes, spec);
 
+    if (!ChangedCode) {
+      llvm::errs() << "Applying changes failed: "
+                   << llvm::toString(ChangedCode.takeError()) << "\n";
+      return 1;
+    }
+
     std::cout << ChangedCode.get() << std::endl;
     // std::cout << toString(ChangedCode.takeError()) << std::endl;
 }
