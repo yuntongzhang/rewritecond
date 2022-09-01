@@ -44,6 +44,11 @@ static StringRef while_cond = "while_cond";
 static StringRef while_body_compound = "while_body_compound";
 static StringRef while_body_single = "while_body_single";
 
+static StringRef for_stmt = "for_stmt";
+static StringRef for_cond = "for_cond";
+static StringRef for_body_compound = "for_body_compound";
+static StringRef for_body_single = "for_body_single";
+
 
 /**************** Rules ****************/
 
@@ -191,14 +196,85 @@ static RewriteRule while_rule_single = makeRule(
 // TODO: do-while loop
 // static RewriteRule do_rule;
 
-// TODO: for loop
+// TODO: rewrite for loop inc/dec as well
+
+static RewriteRule for_rule = makeRule(
+    traverse(TK_IgnoreUnlessSpelledInSource,
+        forStmt(
+            hasCondition(
+                allOf(
+                    expr().bind(for_cond),
+                    unless(declRefExpr())
+                )
+            ),
+            // matches body (only compound statement)
+            hasBody(compoundStmt().bind(for_body_compound))
+        ).bind(for_stmt)
+    ),
+    {
+        // replace cond expr with empty (which is imlicitly 1)
+        changeTo(
+            node(std::string(for_cond)),
+            cat(" ")
+        ),
+        insertBefore(
+            statements(std::string(for_body_compound)),
+            cat(
+                // declare and init cond variable
+                "\nint ", run([](auto x) {return get_var_and_inc();}), " = ", expression(for_cond), ";\n",
+                // insert break conditioned upon value of cond variable
+                "if (!", run([](auto x) {return get_var_only();}), ") break;"
+            )
+        )
+    }
+);
+
+static RewriteRule for_rule_single = makeRule(
+    traverse(TK_IgnoreUnlessSpelledInSource,
+        forStmt(
+            hasCondition(
+                allOf(
+                    expr().bind(for_cond),
+                    unless(declRefExpr())
+                )
+            ),
+            // matches body (only non-compound statement)
+            hasBody(stmt(unless(compoundStmt())).bind(for_body_single))
+        ).bind(for_stmt)
+    ),
+    {
+        // replace cond expr with empty (which is implicitly 1)
+        changeTo(
+            node(std::string(for_cond)),
+            cat(" ")
+        ),
+        insertBefore(
+            statement(std::string(for_body_single)),
+            cat(
+                // declare and init cond variable
+                "{\nint ", run([](auto x) {return get_var_and_inc();}), " = ", expression(for_cond), ";\n",
+                // insert break conditioned upon value of cond variable
+                "if (!", run([](auto x) {return get_var_only();}), ") break;\n"
+            )
+        ),
+        // for single stmt body, still need to insert }
+        insertAfter(
+            statement(std::string(for_body_single)),
+            cat("\n}")
+        )
+    }
+);
 
 static auto rules = applyFirst({
     else_if_rule,
     if_rule,
     while_rule,
-    while_rule_single
+    while_rule_single,
+    for_rule,
+    for_rule_single
 });
+
+/**************** Rules END ****************/
 
 
 // Apply a custom category to all command-line options so that they are the
