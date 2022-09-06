@@ -24,6 +24,9 @@ using namespace clang::tooling;
 
 #define DEBUG false
 
+// keeps track of how many changes have been made so far
+static int changes_count = 0;
+
 // for generating names
 static std::string var_base = "__fuzzfix";
 static int new_var_count = 0;
@@ -54,26 +57,27 @@ static StringRef for_body_single = "for_body_single";
 
 /**************** Rules ****************/
 
-// use the less error-prone traverse mode
+// use the less error-prone traverse mode (strip unuseful AST layers)
 //   https://releases.llvm.org/14.0.0/tools/clang/docs/LibASTMatchersReference.html
+// However, this mode does not work for conditions that are macros.
+// To also capture those, the current design use the non-strip mode for if/else-if, 
+//      and strip mode for the rest.
 
 static RewriteRule else_if_rule = makeRule(
-    traverse(TK_IgnoreUnlessSpelledInSource,
-        ifStmt(
-            hasCondition(
-                allOf(
-                    // cond needs to be an expr, AND not just a single var refering to some decl
-                    expr().bind(if_cond),
-                    unless(declRefExpr())
-                )
-            ),
-            // `else if` has parent of ifStmt, while nested-if usually does not.
-            // The exception is where the inner-if is the only if-body, and is not in {}
-            // However, this exception is of the form `if (x) if (y) ...`, which can be handled in
-            // the same way as our edits here. So, this rule actually captures else-if + this case.
-            hasParent(ifStmt())
-        ).bind(if_stmt)
-    ),
+    ifStmt(
+        hasCondition(
+            allOf(
+                // cond needs to be an expr, AND not just a single var refering to some decl
+                expr().bind(if_cond),
+                unless(declRefExpr())
+            )
+        ),
+        // `else if` has parent of ifStmt, while nested-if usually does not.
+        // The exception is where the inner-if is the only if-body, and is not in {}
+        // However, this exception is of the form `if (x) if (y) ...`, which can be handled in
+        // the same way as our edits here. So, this rule actually captures else-if + this case.
+        hasParent(ifStmt())
+    ).bind(if_stmt),
     {
         // declare the init cond variable
         insertBefore(
@@ -94,18 +98,17 @@ static RewriteRule else_if_rule = makeRule(
 );
 
 static RewriteRule if_rule = makeRule(
-    traverse(TK_IgnoreUnlessSpelledInSource,
-        ifStmt(
-            hasCondition(
-                allOf(
-                    // cond needs to be an expr, AND not just a single var refering to some decl
-                    expr().bind(if_cond),
-                    unless(declRefExpr())
-                )
-            ),
-            unless(hasParent(ifStmt())) // does not have if parent (i.e. not else-if)
-        ).bind(if_stmt)
-    ),
+    ifStmt(
+        hasCondition(
+            allOf(
+                // cond needs to be an expr, 
+                // AND not just a single var refering to some decl (this part is ignored now)
+                expr().bind(if_cond),
+                unless(declRefExpr())
+            )
+        ),
+        unless(hasParent(ifStmt())) // does not have if parent (i.e. not else-if)
+    ).bind(if_stmt),
     {
         // declare the init cond variable
         insertBefore(
@@ -295,8 +298,18 @@ static cl::extrahelp MoreHelp("\nMore help text...\n");
 // AtomicChange consumer
 static AtomicChanges Changes;
 static void consumer(Expected<AtomicChange> C) {
-    if (DEBUG) std::cout << C->toYAMLString() << std::endl;
+    if (auto E = C.takeError()) {
+        // We must consume the error. Typically one of:
+        // - return the error to our caller
+        // - toString(), when logging
+        // - consumeError(), to silently swallow the error
+        // - handleErrors(), to distinguish error types
+        llvm::errs() << "Problem with consuming AtomicChange: " << toString(std::move(E)) << "\n";
+        return;
+    }
+    if (DEBUG) std::cout << "AC #" << changes_count << " : "<< C->toYAMLString() << std::endl;
     Changes.push_back(*C);
+    changes_count++;
 }
 
 
@@ -334,5 +347,6 @@ int main(int argc, const char **argv) {
     }
 
     std::cout << ChangedCode.get() << std::endl;
+    std::cerr << "Successfully applied " << changes_count << " changes!" << std::endl;
     // std::cout << toString(ChangedCode.takeError()) << std::endl;
 }
