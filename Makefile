@@ -17,6 +17,8 @@ LLVM_SRC_PATH := $(BINARY_DIR_PATH)
 LLVM_BUILD_PATH := $(BINARY_DIR_PATH)/bin
 LLVM_BIN_PATH 	:= $(BINARY_DIR_PATH)/bin
 
+CLANG_C_INCLUDE_PATH := $(BINARY_DIR_PATH)/lib/clang/14.0.0/include
+
 $(info -----------------------------------------------)
 $(info Using LLVM_SRC_PATH = $(LLVM_SRC_PATH))
 $(info Using LLVM_BUILD_PATH = $(LLVM_BUILD_PATH))
@@ -63,7 +65,7 @@ BUILDDIR := build
 
 .PHONY: all
 all: make_builddir \
-	$(BUILDDIR)/rewrite_cond
+	 rewrite_cond
 
 .PHONY: make_builddir
 make_builddir:
@@ -71,6 +73,8 @@ make_builddir:
 
 .PHONY: rewrite_cond
 rewrite_cond: $(BUILDDIR)/rewrite_cond
+	echo '#!/bin/bash \nC_INCLUDE_PATH=$$C_INCLUDE_PATH:$(CLANG_C_INCLUDE_PATH) $(BUILDDIR)/rewrite_cond "$$@"' > rewritecond
+	chmod +x rewritecond
 
 $(BUILDDIR)/rewrite_cond: RewriteCond.cpp
 	$(CXX) $(CXXFLAGS) $(LLVM_CXXFLAGS) $^ $(CLANG_LIBS) $(LLVM_LDFLAGS) -o $@
