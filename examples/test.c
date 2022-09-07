@@ -35,7 +35,7 @@ int main() {
         return 1;
     }
 
-    // SHOULDNT CHANGE - if cond is a single var
+    // if cond is a single var
     if (x) {
         return 1;
     }
