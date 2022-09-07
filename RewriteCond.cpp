@@ -343,9 +343,10 @@ int main(int argc, const char **argv) {
 
     Tool.run(Factory.get());
 
-    std::ifstream t(argv[1]);
+    std::ifstream in_file(argv[1]);
     std::stringstream buffer;
-    buffer << t.rdbuf();
+    buffer << in_file.rdbuf();
+    in_file.close();
 
     auto spec = ApplyChangesSpec();
     spec.Format = ApplyChangesSpec::kAll;
@@ -361,11 +362,15 @@ int main(int argc, const char **argv) {
     // write out result
     if (!OutputFileName.empty()) { // write to file
         std::ofstream outfile(OutputFileName);
-        outfile << ChangedCode.get() << std::endl;
-        outfile.close();
-    } else {                       // write to stdout
-        std::cout << ChangedCode.get() << std::endl;
+        if (outfile.is_open()) {   // can write - good path
+            outfile << ChangedCode.get() << std::endl;
+            outfile.close();
+            return 0;
+        }
     }
+    // write to stdout, if fails to write to file
+    std::cerr << "File operation failed / file not specified. Writing to stdout ..." << std::endl;
+    std::cout << ChangedCode.get() << std::endl;
 
     std::cerr << "Successfully applied " << changes_count << " changes!" << std::endl;
     // std::cout << toString(ChangedCode.takeError()) << std::endl;
