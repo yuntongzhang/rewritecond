@@ -6,6 +6,8 @@
 #include "clang/Frontend/FrontendActions.h"
 // Declares llvm::cl::extrahelp.
 #include "llvm/Support/CommandLine.h"
+#include "clang/Driver/Options.h"
+#include "llvm/Option/OptTable.h"
 
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -16,11 +18,13 @@
 #include "clang/Tooling/Transformer/Stencil.h"
 #include "clang/Tooling/Transformer/Transformer.h"
 
+
 using namespace clang;
 using namespace llvm;
 using namespace clang::transformer;
 using namespace clang::ast_matchers;
 using namespace clang::tooling;
+using namespace clang::driver;
 
 #define DEBUG false
 
@@ -284,7 +288,7 @@ static auto rules = applyFirst({
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
-static cl::OptionCategory MyToolCategory("my-tool options");
+static cl::OptionCategory ReCondCategory("rewritecond options");
 
 // CommonOptionsParser declares HelpMessage with a description of the common
 // command-line options related to the compilation database and input files.
@@ -292,7 +296,15 @@ static cl::OptionCategory MyToolCategory("my-tool options");
 static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 
 // A help message for this specific tool can be added afterwards.
-static cl::extrahelp MoreHelp("\nMore help text...\n");
+static cl::extrahelp MoreHelp("\nFor rewriting conditionals into assignments ...\n");
+
+// more options
+static const opt::OptTable &Options = getDriverOptTable();
+static cl::opt<std::string>
+    OutputFileName("o",
+               cl::desc(Options.getOptionHelpText(options::OPT_o)),
+               cl::value_desc("file"),
+               cl::cat(ReCondCategory));
 
 
 // AtomicChange consumer
@@ -314,7 +326,7 @@ static void consumer(Expected<AtomicChange> C) {
 
 
 int main(int argc, const char **argv) {
-    auto ExpectedParser = CommonOptionsParser::create(argc, argv, MyToolCategory);
+    auto ExpectedParser = CommonOptionsParser::create(argc, argv, ReCondCategory);
     if (!ExpectedParser) {
         // Fail gracefully for unsupported options.
         llvm::errs() << ExpectedParser.takeError();
@@ -346,7 +358,15 @@ int main(int argc, const char **argv) {
       return 1;
     }
 
-    std::cout << ChangedCode.get() << std::endl;
+    // write out result
+    if (!OutputFileName.empty()) { // write to file
+        std::ofstream outfile(OutputFileName);
+        outfile << ChangedCode.get() << std::endl;
+        outfile.close();
+    } else {                       // write to stdout
+        std::cout << ChangedCode.get() << std::endl;
+    }
+
     std::cerr << "Successfully applied " << changes_count << " changes!" << std::endl;
     // std::cout << toString(ChangedCode.takeError()) << std::endl;
 }

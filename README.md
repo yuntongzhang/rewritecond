@@ -35,7 +35,7 @@ After building, there should be a file `compile_commands.json` generated.
 To run the tool, do:
 
 ```
-./rewrite_cond <path_to_file>`
+./rewrite_cond <path_to_file> -o <out_file>`
 ```
 The compilation database is automatically searched in the parent directories of the input file.
 Alternatively, specify the directory containing `compile_commands.json` with `-p=<dir>`.
