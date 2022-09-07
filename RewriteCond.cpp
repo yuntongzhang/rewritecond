@@ -48,6 +48,8 @@ std::string get_var_and_inc() {
 static StringRef if_stmt = "if_stmt";
 static StringRef if_cond = "if_cond";
 
+static StringRef case_stmt = "case_stmt";
+
 static StringRef while_stmt = "while_stmt";
 static StringRef while_cond = "while_cond";
 static StringRef while_body_compound = "while_body_compound";
@@ -101,6 +103,38 @@ static RewriteRule else_if_rule = makeRule(
         insertAfter(
             node(std::string(if_stmt)),
             cat("\n}")
+        )
+    }
+);
+
+/* case 1: if(...). Requires special treatment since we can't declare a var before if here. */
+static RewriteRule case_if_rule = makeRule(
+    traverse(TK_IgnoreUnlessSpelledInSource,
+        ifStmt(
+            hasCondition(
+                allOf(
+                    // cond needs to be an expr, 
+                    // AND not just a single var refering to some decl (this part is ignored now)
+                    expr().bind(if_cond),
+                    unless(declRefExpr())
+                )
+            ),
+            // note that if there is already case 1 :{}, parent of `if` would be CompoundStmt instead
+            hasParent(caseStmt().bind(case_stmt)),
+            unless(hasParent(ifStmt())) // does not have if parent (i.e. not else-if)
+        ).bind(if_stmt)
+    ),
+    {
+        // declare the init cond variable
+        insertBefore(
+            statement(std::string(if_stmt)),
+            // only diff to normal `if`: add `;` before declaration
+            cat(";\nint ", run([](auto x) {return get_var_and_inc();}), " = ", expression(if_cond), ";\n")
+        ),
+        // replace cond expr with cond variable
+        changeTo(
+            node(std::string(if_cond)),
+            run([](auto x) {return get_var_only();})
         )
     }
 );
@@ -280,8 +314,10 @@ static RewriteRule for_rule_single = makeRule(
     }
 );
 
+// order is important, since the matching is done from first to last
 static auto rules = applyFirst({
     else_if_rule,
+    case_if_rule,
     if_rule,
     while_rule,
     while_rule_single,

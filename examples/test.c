@@ -83,4 +83,20 @@ int main() {
 
     // for-loop with non-compound body (not null statement)
     for (int i = 0; i <= 12; ++i) return 1;
+
+    int a, b, f;
+    switch (a) {
+        // case without {}, and immediately followed by `if`
+        case 1:
+            if (b > 0) return 1;
+            int c = 0;
+        // case with {}, which does not have the label->declaration issue after rewrite
+        case 2: {
+            if (a == b) {
+                f = 1;
+            }
+        }
+        default:
+            return 0;
+    }
 }
