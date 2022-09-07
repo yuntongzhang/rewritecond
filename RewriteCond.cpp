@@ -147,7 +147,7 @@ static RewriteRule while_rule = makeRule(
         // replace cond expr with true
         changeTo(
             node(std::string(while_cond)),
-            cat("true")
+            cat("1")
         ),
         insertBefore(
             statements(std::string(while_body_compound)),
@@ -183,7 +183,7 @@ static RewriteRule while_rule_single = makeRule(
         // replace cond expr with true
         changeTo(
             node(std::string(while_cond)),
-            cat("true")
+            cat("1")
         ),
         insertBefore(
             statement(std::string(while_body_single)),
